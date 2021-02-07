@@ -10,16 +10,41 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:libhelper.helloWorld"
+		"onCommand:libhelper.editConf",
+		"onCommand:libhelper.genJsonTree"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
 			{
-				"command": "libhelper.helloWorld",
-				"title": "Hello World"
+				"command": "libhelper.editConf",
+				"title": "LibHelper[1] 编辑配置文件"
+			},
+			{
+				"command": "libhelper.genJsonTree",
+				"title": "LibHelper[2] 生成json树"
+			},
+			{
+				"command": "libhelper.genConfHead",
+				"title": "LibHelper[3] 根据json树生成conf头文件"
 			}
-		]
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "libhelper.editConf",
+					"group": "navigation"
+				},
+				{
+					"command": "libhelper.genJsonTree",
+					"group": "navigation"
+				},
+				{
+					"command": "libhelper.genConfHead",
+					"group": "navigation"
+				}
+			]
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
