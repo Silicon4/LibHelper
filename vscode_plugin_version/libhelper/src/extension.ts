@@ -368,9 +368,15 @@ async function handleOnefile(resultCur: vscode.Uri) {
 			}
 		}
 		let text = document.getText();
-		var labels = text.replace("\r", "").split("\n")
+		var labels = text.replace(/[\r]/g, "").split("\n")
+		var validLabel = [];
+		for (var i = 0; i < labels.length; i++) {
+			if (labels[i].replace(/[\\]/g, "/") != "") {
+				validLabel.push(labels[i]);
+			}
+		}
 		// console.log(arr)
-		addToFinalTree(arr, labels)
+		addToFinalTree(arr, validLabel)
 	})
 }
 function constructTree() {
