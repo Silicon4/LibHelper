@@ -3,6 +3,9 @@
 import { create } from 'domain';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import { isNumber, isString } from 'util';
+import { type } from 'os';
+import { stringify } from 'querystring';
 
 var confValues = {
 	libConfFilePath: "",
@@ -15,7 +18,7 @@ var finalTree = {}
 const modelConfigText = [
 	'//此为模板，请编辑后删除',
 	"//{",
-	'//    "libConfFilePath": "填写最终生成json以及头文件的位置",',
+	'//    "libConfFilePath": "填写最终生成头文件的位置",',
 	'//    "libSrcPath": "通用库源码路径",',
 	'//    "describeFileFolderName": "描述文件的文件夹名",',
 	'//    "describeFileName": "描述文件的文件名"',
@@ -136,6 +139,101 @@ function editSettingFile(uristr: string) {
 		}
 	)
 }
+var definelist = [{}]
+function findConfInObj(label: string, obj: object) {
+	if (typeof obj == 'string') {
+		console.log(label, obj)
+		// if (Number(obj) == 1) {
+		definelist.push({
+			label: label,
+			value: obj
+		})
+		return;
+	}
+	var keys = Object.keys(obj)
+	let objAny: any = obj
+	// console.log("keys", keys)
+	if (keys.length == 0) {
+		console.log(label, obj)
+		// if (Number(obj) == 1) {
+		definelist.push({
+			label: label,
+			value: obj
+		})
+		// }
+	} else {
+		for (var i = 0; i < keys.length; i++) {
+			// console.log(objAny[keys[i]])
+			// if (objAny[keys[i]] == undefined) {
+			// 	console.log(objAny)
+			// } else {
+			findConfInObj(keys[i], objAny[keys[i]])
+			// }
+		}
+	}
+}
+async function genHeadFile() {
+	await updateSettingsToVar()
+	let treenode: any = finalTree
+	const jsonuri = vscode.Uri.file(getWsPath() + "/.vscode/" + "libHelperTree.json");
+	vscode.workspace.openTextDocument(jsonuri).then((document) => {
+
+		let text = document.getText();
+		if (text.match(/^\s*$/)) {
+			text = "{}"
+		}
+		try {
+			finalTree = {}
+			oldTree = JSON.parse(text)
+			definelist = []
+			let definelistany: any = definelist
+			findConfInObj("", oldTree)
+			console.log("definelist", definelist)
+			var definestr = ""
+			for (var i = 0; i < definelistany.length; i++) {
+				definestr = definestr + "#define " + definelistany[i].label.toString() + " " + definelistany[i].value.toString() + "\r\n"
+			}
+			console.log("definestr", definestr)
+
+
+			var wsedit = new vscode.WorkspaceEdit();
+			const jsonuri = vscode.Uri.file(getWsPath() + "/" + confValues.libConfFilePath);
+			console.log("jsonuri", jsonuri)
+
+			vscode.workspace.findFiles(
+				jsonuri.path
+			).then(
+				async result => {
+					console.log(result)
+					if (result.length == 0) {
+						wsedit.createFile(jsonuri);
+						await vscode.workspace.applyEdit(wsedit)
+					}
+
+					console.log("definestr", definestr)
+					vscode.workspace.openTextDocument(jsonuri).then((document) => {
+						var firstLine = document.lineAt(0);
+						var lastLine = document.lineAt(document.lineCount - 1);
+						var textRange = new vscode.Range(firstLine.range.start, lastLine.range.end);
+						wsedit = new vscode.WorkspaceEdit();
+						wsedit.get(jsonuri)
+						wsedit.delete(jsonuri, textRange)
+						wsedit.insert(jsonuri, new vscode.Position(0, 0), definestr)
+
+						vscode.workspace.applyEdit(wsedit).then(() => {
+							vscode.window.showTextDocument(jsonuri);
+							// vscode.window.showInformationMessage('请按照模板编辑，并且移除模板内容');
+						})
+					})
+
+
+				})
+
+		} catch {
+
+		}
+	})
+}
 function updateSettingsToVar() {
 	return vscode.workspace.fs.readDirectory(vscode.Uri.file(getWsPath() + "/.vscode")).then(
 		(someArray) => {
@@ -161,7 +259,7 @@ function updateSettingsToVar() {
 					let text = document.getText();
 					console.log("text in conf:", text)
 					var conf = JSON.parse(text)
-					console.log("json in conf:", conf.libConfFilePath)
+					console.log("libConfFilePath:", conf.libConfFilePath)
 
 					if (conf != undefined
 						&& conf.libConfFilePath != undefined
@@ -237,7 +335,7 @@ function addToFinalTree(arr: string[], labels: string[]) {
 		if (label.indexOf("|") > -1) {
 			var set = label.split("|")
 			label = set[0]
-			state = parseInt(set[1])
+			state = set[1]
 		}
 		if (oldtreenode != undefined && oldtreenode[label] != undefined) {
 			state = oldtreenode[label]
@@ -316,9 +414,13 @@ function constructTree() {
 									wsedit.insert(jsonuri, new vscode.Position(0, 0), jsonstr)
 
 									vscode.workspace.applyEdit(wsedit).then(() => {
-										vscode.window.showTextDocument(jsonuri);
+										vscode.window.showTextDocument(jsonuri).then(
+											() => {
+												vscode.commands.executeCommand("editor.action.formatDocument")
+											}
+										)
 										vscode.window.showInformationMessage('树已生成，请配置外设状态');
-										vscode.commands.executeCommand("editor.action.formatDocument")
+
 									})
 								})
 
@@ -413,9 +515,18 @@ export function activate(context: vscode.ExtensionContext) {
 		// Display a message box to the user
 		// vscode.window.showInformationMessage('Hello World from LibHelper!');
 	});
-
+	let disposable3 = vscode.commands.registerCommand('libhelper.genConfHead', () => {
+		// The code you place here will be executed every time your command is executed
+		if (vscode.workspace.workspaceFolders) {
+			genHeadFile()
+			console.log("genConfHead")
+		}
+		// Display a message box to the user
+		// vscode.window.showInformationMessage('Hello World from LibHelper!');
+	});
 	context.subscriptions.push(disposable);
 	context.subscriptions.push(disposable2);
+	context.subscriptions.push(disposable3);
 }
 
 // this method is called when your extension is deactivated
